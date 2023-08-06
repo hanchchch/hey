@@ -1,4 +1,4 @@
-package chat
+package llm
 
 import (
 	"context"
@@ -10,36 +10,39 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-type OpenAIChatIO struct {
-	config configure.OpenAIConfig
-	stream chan string
+type OpenAILLM struct {
+	Config  configure.OpenAIConfig
+	Stream  chan string
+	History []openai.ChatCompletionMessage
 }
 
-func (c *OpenAIChatIO) Response() chan string {
-	return c.stream
+func (o *OpenAILLM) Response() chan string {
+	return o.Stream
 }
 
-func (c *OpenAIChatIO) Chat(message string) (*FunctionCall, error) {
+func (o *OpenAILLM) Chat(message string) (*FunctionCall, error) {
 	ctx := context.Background()
-	client := openai.NewClient(c.config.ApiKey)
+	client := openai.NewClient(o.Config.ApiKey)
 	request := openai.ChatCompletionRequest{
 		Stream:   true,
-		Model:    c.config.Model,
+		Model:    o.Config.Model,
 		Messages: []openai.ChatCompletionMessage{},
 	}
 
-	if c.config.MaxTokens != nil {
-		request.MaxTokens = int(*c.config.MaxTokens)
+	if o.Config.MaxTokens != nil {
+		request.MaxTokens = int(*o.Config.MaxTokens)
 	}
 
-	if c.config.Prompts != nil {
-		request.Messages = *c.config.Prompts
+	if o.Config.Prompts != nil {
+		request.Messages = *o.Config.Prompts
 	}
 
-	request.Messages = append(request.Messages, openai.ChatCompletionMessage{
+	o.History = append(o.History, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: message,
 	})
+
+	request.Messages = append(request.Messages, o.History...)
 
 	stream, err := client.CreateChatCompletionStream(ctx, request)
 
@@ -48,6 +51,7 @@ func (c *OpenAIChatIO) Chat(message string) (*FunctionCall, error) {
 	}
 	defer stream.Close()
 
+	content := ""
 	funcName := ""
 	funcArgumentsStr := ""
 	for {
@@ -59,7 +63,8 @@ func (c *OpenAIChatIO) Chat(message string) (*FunctionCall, error) {
 		delta := response.Choices[0].Delta
 
 		if delta.Content != "" {
-			c.stream <- delta.Content
+			o.Stream <- delta.Content
+			content += delta.Content
 		}
 
 		if delta.FunctionCall != nil {
@@ -80,6 +85,15 @@ func (c *OpenAIChatIO) Chat(message string) (*FunctionCall, error) {
 	if funcArgumentsStr != "" {
 		json.Unmarshal([]byte(funcArgumentsStr), &funcArguments)
 	}
+
+	if content != "" {
+		o.History = append(o.History, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: content,
+		})
+	}
+
+	// TODO function call result?
 
 	return &FunctionCall{
 		Name:      funcName,

@@ -3,11 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
+	"time"
 
-	"github.com/hanchchch/hey/pkg/chat"
+	"github.com/hanchchch/hey/pkg/chatio"
 	"github.com/hanchchch/hey/pkg/configure"
 )
+
+func scanlinesForever(io *chatio.ChatIO) {
+	for {
+		var message string
+		fmt.Scanln(&message)
+		io.Writeln(message)
+	}
+}
 
 func main() {
 	config, err := configure.FromJSON("config.json")
@@ -22,19 +30,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(os.Args) < 2 {
-		fmt.Printf("Usage: hey <model>, <ask anything>\n")
-		fmt.Printf("Available models: %v\n", names)
-		os.Exit(0)
-	}
-
-	name, message := "", ""
-	if strings.HasPrefix(os.Args[1], ",") {
-		name = os.Args[1][:len(os.Args[1])-1]
-		message = strings.Join(os.Args[2:], " ")
-	} else {
-		name = names[0]
-		message = strings.Join(os.Args[1:], " ")
+	name := names[0]
+	if len(os.Args) > 1 {
+		name = os.Args[1]
 	}
 	modelConfig := config.ModelConfig(name)
 	if modelConfig == nil {
@@ -42,12 +40,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	chatIo := chat.NewChatIO(*modelConfig)
-	go chat.ListenResponse(chatIo, func(response string) {
-		fmt.Printf("%s", response)
+	io := chatio.NewChatIO(*modelConfig, 1*time.Second)
+	if io == nil {
+		fmt.Printf("Failed to create chat io with model: %v\n", name)
+		os.Exit(1)
+	}
+	go io.ListenResponse(func(response string) {
+		fmt.Print(response)
 	})
-	chatIo.Chat(message)
 
-	fmt.Println()
-	os.Exit(0)
+	go scanlinesForever(io)
+
+	for {
+		fmt.Print(">>> ")
+		message := io.WaitForMessage()
+		_, err := io.Chat(message)
+		if err != nil {
+			fmt.Printf("Failed to chat: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Println()
+	}
 }
