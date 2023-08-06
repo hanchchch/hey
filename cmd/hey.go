@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/alecthomas/chroma/quick"
 	"github.com/hanchchch/hey/pkg/chatio"
 	"github.com/hanchchch/hey/pkg/configure"
 )
@@ -39,15 +40,28 @@ func main() {
 		fmt.Printf("Model %s not found. Available models: %v\n", name, names)
 		os.Exit(1)
 	}
-	fmt.Printf("Starting chat with %v\n", name)
+	fmt.Printf("Starting a chat with %v\n", name)
 
-	io := chatio.NewChatIO(*modelConfig, 1*time.Second)
+	io := chatio.NewChatIO(*modelConfig, 500*time.Microsecond)
 	if io == nil {
 		fmt.Printf("Failed to create chat io with model: %v\n", name)
 		os.Exit(1)
 	}
+
+	// TODO
+	code := ""
+	codingLanguage := ""
 	go io.ListenResponse(func(response string) {
-		fmt.Print(response)
+		if io.CodingLanguage == nil {
+			if code != "" {
+				quick.Highlight(os.Stdout, code, codingLanguage, "terminal256", "monokai")
+			}
+			fmt.Print(response)
+			code = ""
+		} else {
+			codingLanguage = *io.CodingLanguage
+			code += response
+		}
 	})
 
 	go scanlinesForever(io)
@@ -60,6 +74,7 @@ func main() {
 			fmt.Printf("Failed to chat: %s\n", err)
 			os.Exit(1)
 		}
+		time.Sleep(100 * time.Microsecond)
 		fmt.Println()
 	}
 }
