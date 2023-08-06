@@ -39,6 +39,7 @@ func main() {
 		fmt.Printf("Model %s not found. Available models: %v\n", name, names)
 		os.Exit(1)
 	}
+	fmt.Printf("Starting chat with %v\n", name)
 
 	io := chatio.NewChatIO(*modelConfig, 1*time.Second)
 	if io == nil {
