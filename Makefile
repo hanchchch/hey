@@ -38,3 +38,6 @@ $(ARM64_BINS):
 
 $(AMD64_BINS):
 	GOARCH=$(word 2,$(subst /, ,$@)) GOOS=$(word 3,$(subst /, ,$@)) go build -o $@ $(CMD_HEY)
+
+clean: ## Clean built binaries
+	rm -rf bin/*

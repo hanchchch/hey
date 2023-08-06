@@ -23,19 +23,23 @@ func (c *OpenAIChatIO) Chat(message string) (*FunctionCall, error) {
 	ctx := context.Background()
 	client := openai.NewClient(c.config.ApiKey)
 	request := openai.ChatCompletionRequest{
-		Stream: true,
-		Model:  c.config.Model,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: message,
-			},
-		},
+		Stream:   true,
+		Model:    c.config.Model,
+		Messages: []openai.ChatCompletionMessage{},
 	}
 
 	if c.config.MaxTokens != nil {
 		request.MaxTokens = int(*c.config.MaxTokens)
 	}
+
+	if c.config.Prompts != nil {
+		request.Messages = *c.config.Prompts
+	}
+
+	request.Messages = append(request.Messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: message,
+	})
 
 	stream, err := client.CreateChatCompletionStream(ctx, request)
 
