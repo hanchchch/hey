@@ -12,9 +12,14 @@ import (
 
 type OpenAIChatIO struct {
 	config configure.OpenAIConfig
+	stream chan string
 }
 
-func (c *OpenAIChatIO) Chat(message string, onContent *func(string) error) (*string, *FunctionCall, error) {
+func (c *OpenAIChatIO) Response() chan string {
+	return c.stream
+}
+
+func (c *OpenAIChatIO) Chat(message string) (*FunctionCall, error) {
 	ctx := context.Background()
 	client := openai.NewClient(c.config.ApiKey)
 	request := openai.ChatCompletionRequest{
@@ -35,11 +40,10 @@ func (c *OpenAIChatIO) Chat(message string, onContent *func(string) error) (*str
 	stream, err := client.CreateChatCompletionStream(ctx, request)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer stream.Close()
 
-	content := ""
 	funcName := ""
 	funcArgumentsStr := ""
 	for {
@@ -51,10 +55,7 @@ func (c *OpenAIChatIO) Chat(message string, onContent *func(string) error) (*str
 		delta := response.Choices[0].Delta
 
 		if delta.Content != "" {
-			content += delta.Content
-			if onContent != nil {
-				(*onContent)(delta.Content)
-			}
+			c.stream <- delta.Content
 		}
 
 		if delta.FunctionCall != nil {
@@ -68,7 +69,7 @@ func (c *OpenAIChatIO) Chat(message string, onContent *func(string) error) (*str
 	}
 
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, nil, err
+		return nil, err
 	}
 
 	funcArguments := []string{}
@@ -76,7 +77,7 @@ func (c *OpenAIChatIO) Chat(message string, onContent *func(string) error) (*str
 		json.Unmarshal([]byte(funcArgumentsStr), &funcArguments)
 	}
 
-	return &content, &FunctionCall{
+	return &FunctionCall{
 		Name:      funcName,
 		Arguments: funcArguments,
 	}, nil

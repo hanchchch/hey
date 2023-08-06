@@ -43,11 +43,10 @@ func main() {
 	}
 
 	chatIo := chat.NewChatIO(*modelConfig)
-	onContent := func(content string) error {
-		fmt.Printf("%s", content)
-		return nil
-	}
-	chatIo.Chat(message, &onContent)
+	go chat.ListenResponse(chatIo, func(response string) {
+		fmt.Printf("%s", response)
+	})
+	chatIo.Chat(message)
 
 	fmt.Println()
 	os.Exit(0)

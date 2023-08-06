@@ -8,12 +8,19 @@ type FunctionCall struct {
 }
 
 type ChatIO interface {
-	Chat(string, *func(content string) error) (*string, *FunctionCall, error)
+	Response() chan string
+	Chat(string) (*FunctionCall, error)
 }
 
 func NewChatIO(config configure.ModelConfig) ChatIO {
 	if config.OpenAI != nil {
-		return &OpenAIChatIO{config: *config.OpenAI}
+		return &OpenAIChatIO{config: *config.OpenAI, stream: make(chan string)}
 	}
 	return nil
+}
+
+func ListenResponse(chatIo ChatIO, callback func(string)) {
+	for response := range chatIo.Response() {
+		callback(response)
+	}
 }
